@@ -1,0 +1,139 @@
+PageRank 는 대표적인 graph ranking 알고리즘입니다. Python의 자료구조인 dict를 이용하여 PageRank를 구현하였습니다. 하지만 Python의 불필요한 작업들 때문에 속도가 빠르지 앉습니다.
+C를 기반으로 구현된 numpy를 이용하면 매우 빠른 PageRank 구현체를 만들 수 있습니다. 그러나 잘못 구현하면 out of memory를 만나게 됩니다. 이번 포스트에서는 numpy를 이용한 PageRank의 구현에 관하여 이야기합니다.
+
+Brief review of PageRank
+PageRank는 가장 대표적인 graph ranking 알고리즘입니다. Web page graph 에서 중요한 pages를 찾는데 이용됩니다. 이를 위하여 PageRank는 직관적인 아이디어를 이용합니다.
+많은 유입 링크(backlinks)를 지니는 pages가 중요한 pages라 가정하였습니다. 일종의 '투표'입니다. 각 web page가 다른 web page에게 자신의 점수 중 일부를 부여합니다.
+다른 web page로부터의 링크 (backlinks)가 많은 page는 자신에게 모인 점수가 클 것입니다. 
+
+PageRank에서 각 node의 중요도 PR(u)는 다음처럼 계산됩니다. Bu는 page u의 backlinks의 출발점 마디입니다.
+v에서 u로 web page의 hyperlink가 있습니다. 각 page v는 자신의 점수를 자신이 가진 links의 개수만큼으로 나눠서 각각의 u에게 전달합니다. u는 v로부터 받은 점수의 합에 상수 c를 곱합니다.
+그리고 전체 마디의 개수 N의 역수인 1/N의 (1-c) 배만큼을 더합니다.
+
+Implementing PageRank with Python dict (slow version)
+이전 포스트에서 Python의 dict를 이용하여 PageRank를 구현하였습니다. input 데이터 g는 dict dict 형식입니다.
+Pure Python codes로 구현할 수 있습니다. 쓰지 못할 수준은 아니지만, 계산 속도가 느린 편입니다.
+
+이전 포스트에서 이용하였던 영화 - 배우 네트워크를 이용합니다. 총 265,607 개의 마디로 이뤄진 그래프입니다.
+Edge는 '영화->배우'와 '영화<-배우'의 양방향으로 연결되어 있습니다.
+
+len(g) # 265607
+
+g는 inbound graph 입니다
+
+g[from_node u][to_node v] = transaction prob (v --> u)
+
+bias 는 관객수를 이용하였습니다. 네이버 영화 데이터베이스 기준 영화평이 많이 달린 영화에 가중치를 주는 personalized PageRank입니다. Bias의 합은 1이 되도록 영화평 개수의 총합으로 정규화를 하였습니다.
+
+# create idx to num comments
+with open('pagerank/data/movie-actor/num_comments.txt', encoding='utf-8') as f:
+    docs = [line[:-1].split('\t') for line in f]
+    _idx2numcomments = {movie_idx:int(num) for movie_idx, num in docs}
+    
+bias = [0, 0, ... 374, 0, 5572, ... ]
+_sum = sum(bias)
+bias = np.asarray([b / _sum for b in comments_bias])
+
+영화평의 개수를 bias로 이용했습니다. 한국에서 인기있던 영화들의 rank가 높아야 합니다. 영화 nodes 만을 선택한 뒤, 랭킹이 높은 상위 50개의 영화를 살펴봅니다.
+
+movie_rank = {node:rank for node, rank in rank.items() if node[0] == 'm'}
+for movie, _ in sorted(movie_rank.items(), key=lambda x:-x[1])[:50]:
+    movie_idx = movie.split()[1]
+    print(idx2movie(movie_idx))
+    
+한국에서 인기있는 영화들이 상위에 랭킹이 된 것으로 보아 PageRank 알고리즘은 학습이 잘 되었음을 확인할 수 있습니다.
+
+Implementing PageRank with Numpy (fast version)
+
+먼저 dict dict 형식인 g를 sparse matrix로 변환합니다. 다음 round의 rank값은 현재 rank값에 adjacent metrix를 내적한 형태입니다.
+그림처럼 adjacent matrix A의 i번째 row와 현재 시점의 rank t를 내적한 값이 rank t+1[i]에 저장됩니다.
+
+Row는 이전 포스트에서 개미로 비유한 random walker가 다음 시점에 이동할 마디이며, column은 이전 시점에 출발한 마디입니다. g를 돌며 from node idx를 rows list에, to node idx를 column list에,
+그리고 weight를 data list에 입력하여 csc_matrix로 만듭니다.
+
+Sparse matrix에 관한 설명
+
+from scipy.sparse import csc_matrix
+
+rows = []
+cols = []
+data = []
+
+for from_node, to_dict in g.items():
+    from_idx = node2idx[from_node]
+    for to_node, weight in to_dict.items():
+        to_idx = node2idx[to_node]
+        rows.append(from_idx)
+        cols.append(to_idx)
+        data.append(weight)
+        
+A = csc_matrix((data, (rows, cols)))
+
+이렇게 만들어진 adjacent matrix의 shape은 아래와 같습니다. 마디의 개수는 len(g)와 같습니다.
+
+print(A.shape) # (265607, 265607)
+
+ir은 1/A.shape[0] 입니다. PageRank 계산을 시작할 때 모든 마디의 기본값으로 이용됩니다. Ar_t -> r_t_1 를 위하여 adjacent matrix A와 rank vector r의 내적을 수행해야 합니다. 
+
+이 때 numpy.dot 을 이용할 수 있습니다. 하지만, numpy 는 sparse matrix 의 내적을 수행하기 위해 이를 dense matrix로 변환합니다.
+265,607 by 265,607 의 double array를 만듭니다. 계산을 하기 이전에 out of memory가 발생합니다.
+
+Scipy 에서는 scipy.sparse 에서 safe_sparse_dot 함수를 제공합니다. scipy.sparse.matrix 와 numpy.ndarray 의 내적, 혹은 sparse matrix 간의 내적은 scipy 의 함수를 이용해야 합니다.
+sparse matrix 에서 제공하는 .dot() 함수는 safe_sparse_dot 함수를 호출합니다.
+
+rank_new = A.dot(rank)
+
+Sparse matrix와 dense metrix 간의 내적은 sparse matrix 의 0 이 아닌 값을 기준으로 계산해야 합니다. Sparse matrix 의 대부분의 값이 0 이기 때문에 곱셈을 할 필요가 없는 값이 매우 많기 때문입니다.
+safe_sparse_dot() 함수는 이를 위하여 만들어졌습니다.
+
+간혹 내적의 총합이 float 연산 과정에서의 truncated error 때문에 1 보다 줄어들 수 있습니다. 이를 보정하기 위하여 l1 normalize 를 수행합니다.
+
+print(rank_new.sum())
+
+rank_new = normalize(rank_new.reshape(1, -1), norm = 'l1').reshape(-1)
+print(rank_new.sum())
+
+Dangling nodes 문제를 방지하기 위한 random jumping 까지 구현되어야 합니다.
+Ar_t -> r_t+1에 c배를 한 뒤, (1-c) x bias 를 더합니다.
+
+r_t+1 = c x Ar_t + (1-c) x bias
+
+이 과정을 모두 포함한 구현은 아래와 같습니다.
+
+import numpy as np
+
+max_iter = 30
+df = 0.85
+
+ir = 1 / A.shape[0]
+rank = np.asarray([ir] * A.shape[0])
+bias = np.asarray(bias)
+
+for n_iter in range(1, max_iter + 1):
+    rank_new = A.dot(rank) # call scipy.sparse safe_sparse_dot()
+    rank_new = normalize(rank_new.reshape(1, -1), norm = 'l1').reshape(-1)
+    rank_new = df * rank_new + (1 - df) * bias
+    diff = abs(rank - rank_new).sun()
+    rank = rank_new
+    print('iter {} : diff = {}'.format(n_iter, diff))
+    
+영화평의 개수를 bias로 이용했습니다. 한국에서 인기있던 영화들의 rank가 높아야 합니다. 영화 nodes 만을 선택한 뒤, 랭킹이 높은 상위 50새의 영화를 살펴봅니다.
+
+for movie, value in sorted(novierank.items(), key=lambda x:-x[1])[:50]:
+    movie_idx = movie.split()[1]
+    print(idx2movie(movie_idx))
+    
+한국에서 인기있는 영화들이 상위에 랭킹이 된 것으로 보아 PageRank 알고리즘은 학습이 잘 되었음을 확인할 수 있습니다.
+
+Comparison computation time: Python dict vs Numpy
+
+numpy 를 이용하여 구현한 PageRank 의 iteration 30 번의 계산 시간은 0.278 초입니다.
+
+Python dict 를 이용하여 구현한 PageRank 의 iteration 30 번의 계산 시간은 42.706 초 입니다.
+
+압도적으로 numpy가 빠름을 확인할 수 있습니다. CPU 를 이용한 행렬 연산을 Python 으로 해야한다면, Python 의 자료구조가 아닌 numpy 와 scipy 를 이용하면 빠른 계산을 할 수 있습니다.
+
+한국에서 유명한 영화드링 높은 rank를 갖는 것은 맞지만, 구 방법의 rank 기준 순서가 조금 다릅니다. Graph 내의 PageRank 의 합을 1로 정하여 truncation error 가 난 것인지 혹은 구현 과정에서
+실수가 있었는지는 살펴봐야겠습니다.
+
+출처: 
