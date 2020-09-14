@@ -1,3 +1,15 @@
+Iterator
+
+iterator 객체 - 값을 차례대로 꺼낼 수 있는 객체입니다.
+iterator는 iterable한 객체를 내장함수 또는 iterable 객체의 메소드로 객체를 생성할 수 있습니다.
+파이썬 내장함수 iter() 를 사용해 iterator 객체를 만들어봅니다.
+
+b = {1, 2, 3}
+b_iter = b.__iter__()
+b_iter.__next__() # 1
+b_iter.__next__() # 2
+b_iter.__next__() # 3
+
 1. Iterator
 리스트, Set, Dictionary와 같은 컬렉션이나 문자열과 같은 문자 Sequence 등은 for문을 써서 하나씩 데이터를 처리할 수 있는데, 이렇게 하나 하나 처리할 수 있는 컬렉션이나 Sequence 들을
 Iterable 객체 (Iterable Object)라 부른다.
@@ -49,6 +61,12 @@ coll = MyCollection()
 for x in coll:
     print(x) # 0,1,2,3,4,5,6,7,8,9
     
+    
+*** 제너레이터(Generator)는 이터레이터(Iterator)를 만드는 간단하고 강력한 도구입니다.
+제너레이터는 일반적인 함수처럼 작성되지만 데이터를 반환하기 위해서 return 문장이 아니라 yield 문장을 사용합니다.
+매번 next() 메서드가 호출될 때마다 제너레이터는 중단된 지점부터 다시 시작합니다. (모든 데이터 값과 마지막 실행된 명령문을 기억합니다.)
+즉, return 을 사용하는 함수라면, 반환될 때마다 지역변수들은 사라지지만 yield를 사용할 경우 내부 값들이 보존됩니다.
+    
 2. Generator
 
 Generator는 Iterator의 특수한 한 형태이다.
@@ -87,7 +105,7 @@ Generator는 물론 예제의 마지막 부분과 같이 for 루프에서 사용
 이러한 Generator는 데이터가 무제한이어서 모든 데이터를 리턴할 수 없는 경우나, 데이터가 대량이어서 일부씩 처리하는 것이 필요한 경우, 혹은 모든 데이터를 미리 계산하면 속도가 느려서 그때 그때
 On Demand로 처리하는 것이 좋은 경우 등에 종종 사용된다.
 
-3. Generator Expression
+3. Generator Expression ☆☆☆☆☆
 
 Generator Expression 은 Generator Comprehension으로도 불리우는데, List Comprehension과 외관상 유사하다.
 List Comprehension은 앞뒤를 [...] 처럼 대괄호로 표현한다면, Generator Expression (...) 처럼 둥근 괄호를 사용한다.
@@ -110,9 +128,37 @@ print(type(g)) # <class 'generator'>
 # 10개 출력
 for i in range(20):
     value = next(g)
-    print(value)
+    print(value) # 0, 1, 4, 9, 16, 25, 36, 49, 64, 81
 
 # 나머지 모두 출력
 
 for x in g:
-    print(x)
+    print(x) # 100, 121, 144, 169, 196, 225, 256, 289, ..., 1000000
+    
+    
+    
+Iterator 예제 
+
+class IterClass(object): # 클래스로 Iterator 구현을 위해 Class 정의
+    def __init__(self, start, last):
+        self.current = start
+        self.max = last
+        
+    def __iter__(self): # 없으면 'object is not iterable' 예외 발생
+    # Iterable 한 Object 정의를 위한 __iter__ 메소드 Overriding
+        return self
+    
+    def __next__(self): # 데이터 순회를 위해 __next__ 메소드 Overriding 및 예외처리
+        if self.current > self.max:
+            raise StopIteration
+        else:
+            self.current += 1
+            return self.current - 1 
+
+n_list1 = IterClass(1,10)
+
+
+Iterator Pattern은 이미 하나의 디자인 패턴으로 정형화 되어 있는 것 중 하나입니다.
+데이터 타입의 내부 구현을 노출하지 않고 포함하고 있는 요소들을 순회할 수 있는 방법을 제공하는 패턴을 이터레이터 패턴이라고 합니다.
+
+※ 대부분 언어에서 이터레이터 패턴을 콜렉션 라이브러리의 구현 방식이나 문법 요소로 제공하고 있기는 하지만 파이썬만큼 언어 자체에 자연스럽게 녹아 있는 경우는 많지 않다고 합니다.
