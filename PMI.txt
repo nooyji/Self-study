@@ -1,5 +1,7 @@
 Point Mutual Information
 
+https://lovit.github.io/nlp/2018/04/22/implementing_pmi_numpy_practice/
+
 포인트 상호 정보
 
 PMI 수식: 확률변수 x와 y에 대한 PMI
